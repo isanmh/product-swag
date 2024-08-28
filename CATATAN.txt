@@ -1,0 +1,98 @@
+Cara membuat laravel :
+1. Install composer, laragon, node js
+2. cara donwload laravel:
+    composer create-project laravel/laravel nama_project
+   dengan versi 9.0
+    composer create-project laravel/laravel:^10.0 example-app
+3. cara menjalankan laravel:
+    php artisan serve
+4. cara membuat controller, model, migration :
+    php artisan make:model Product -mcr
+
+   membuat controller api product :
+    php artisan make:controller Api/ProductApiController
+
+5. setting env database
+6. membuat factory :
+    php artisan make:factory ProductFactory --model=Product
+    ------------
+    'name' => $this->faker->text(10),
+    'description' => $this->faker->text,
+    'price' => $this->faker->numberBetween(1000, 100000),
+    'image' => $this->faker->imageUrl(),
+7. membuat seeder :
+    php artisan make:seeder ProductSeeder
+    ------------
+    Product::factory(10)->create();
+8. menjalankan seeder :
+    php artisan db:seed --class=ProductSeeder
+    php artisan migrate:fresh --seed
+
+9. membuat api auth :
+    php artisan make:controller API/AuthController
+
+10. membuat middleware custom :
+    php artisan make:middleware CustomHeader
+11. setting CustomHeader.php :
+    authController.php
+    public const header = [
+        'X-PARTNER-ID' => '123',
+        'X-EXTERNAL-ID' => '123',
+        'X-SIGNATURE' => '123',
+        'X-TIMESTAMP' => '123',
+    ];
+
+    CustomHeader.php
+    public function handle(Request $request, Closure $next): Response
+    {
+        $ah = AuthController::header;
+        $res1 = $request->header('X-PARTNER-ID');
+        $res2 = $request->header('X-EXTERNAL-ID');
+        $res3 = $request->header('X-SIGNATURE');
+        $res4 = $request->header('X-TIMESTAMP');
+
+        if (
+            $res1 === $ah['X-PARTNER-ID'] &&
+            $res2 === $ah['X-EXTERNAL-ID'] &&
+            $res3 === $ah['X-SIGNATURE'] &&
+            $res4 === $ah['X-TIMESTAMP']
+        ) {
+            return $next($request);
+        } else {
+            return response()->json(
+                [
+                    'status' => 503,
+                    'error' => "Silahkan isi header dengan benar"
+                ]
+            );
+        }
+    }
+
+12. setting middleware di kernel.php :
+    protected $middlewareAliases = [
+        // custom header
+        "snap-bi" => CustomHeader::class,
+    ];
+13. setting route :
+    Route::middleware(['auth:sanctum', 'snap-bi'])->group(function () {
+        Route::get('product', [ProductApiController::class, 'index']);
+    });
+    atau
+    Route::get('product', [ProductApiController::class, 'index'])->middleware('snap-bi');
+
+14. membuat open api dengan swagger :
+    composer require darkaonline/l5-swagger
+    php artisan vendor:publish --provider "L5Swagger\L5SwaggerServiceProvider"
+    php artisan l5-swagger:generate
+15. setting AppServiceProvider.php di register:
+    $this->app->register(\L5Swagger\L5SwaggerServiceProvider::class);
+16. setting Contorller.php :
+    /**
+    * @OA\Info(
+    *    title="Dokumentasi REST API Products",
+    *    version="1.0.0",
+    * )
+    */
+17. jalankan swagger :
+    php artisan l5-swagger:generate
+    http://localhost:8000/api/documentation
