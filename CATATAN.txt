@@ -96,3 +96,193 @@ Cara membuat laravel :
 17. jalankan swagger :
     php artisan l5-swagger:generate
     http://localhost:8000/api/documentation
+
+
+================SNAP BI================
+1. cara membuat private key :
+    openssl genrsa -out private.pem 2048
+    --> Generate Private Key
+    openssl genrsa -out PRIVATEKEYNAME.key 2048
+2. cara membuat public key :
+    openssl rsa -in private.pem -pubout -out public.pem
+    -- Generate Public Key
+    openssl rsa -in PRIVATEKEYNAME.key -pubout -out PUBLICKEYNAME.pub
+3. SIGNATURE :
+    --> Generate CSR
+    opensslreq -new -key PRIVATEKEYNAME.key -out CSRNAME.csr-subj "/C=ID/ST=DKI Jakarta/L=Jakarta Pusat/O=NAMAPESERTA/OU=Information Security Division/CN=BIC"
+4. Signature Service :
+    // app/Services/SignatureService.php
+
+    namespace App\Services;
+
+    class SignatureService
+    {
+        protected $clientKey = "client key";
+        protected $privateKeyString = <<<EOD
+        -----BEGIN PRIVATE KEY-----
+        XXXXX
+        -----END PRIVATE KEY-----
+        EOD;
+
+        public function generateSignature()
+        {
+            $timestamp = now()->format('Y-m-d\TH:i:sP');
+            $stringToSign = $this->clientKey . "|" . $timestamp;
+
+            $privateKey = openssl_pkey_get_private($this->privateKeyString);
+            if (!$privateKey) {
+                return ['error' => 'Private key not valid'];
+            }
+
+            $signature = '';
+            if (!openssl_sign($stringToSign, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+                return ['error' => 'Failed to sign data'];
+            }
+
+            return [
+                'signature_hex' => bin2hex($signature),
+                'timestamp' => $timestamp,
+            ];
+        }
+    }
+
+5. setting controller :
+php artisan make:controller SignatureController
+// app/Http/Controllers/SignatureController.php
+
+namespace App\Http\Controllers;
+
+use App\Services\SignatureService;
+
+class SignatureController extends Controller
+{
+    protected $signatureService;
+
+    public function __construct(SignatureService $signatureService)
+    {
+        $this->signatureService = $signatureService;
+    }
+
+    public function generateSignature()
+    {
+        return $this->signatureService->generateSignature();
+    }
+}
+6. setting route :
+/ routes/web.php
+
+use App\Http\Controllers\SignatureController;
+
+Route::get('/generate-signature', [SignatureController::class, 'generateSignature']);
+
+7. mendapatkan token :
+php artisan make:controller TokenApiController
+// app/Http/Controllers/ApiController.php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Support\Facades\Http;
+
+class ApiController extends Controller
+{
+    public function sendRequest()
+    {
+        $response = Http::withHeaders([
+            'X-CLIENT-KEY' => 'clientkey',
+            'X-TIMESTAMP' => '2024-08-13T12:19:20+07:00',
+            'X-SIGNATURE' => 'signature',
+            'Content-Type' => 'application/json',
+        ])->post('url', [
+            'grant_type' => 'client_credentials',
+            'additionalInfo' => new \stdClass(),
+        ]);
+
+        return $response->body();
+    }
+}
+8. setting route :
+// routes/web.php
+
+use App\Http\Controllers\ApiController;
+
+Route::get('/send-request', [ApiController::class, 'sendRequest']);
+
+9. signature Transaksi :
+// app/Services/SignatureService.php
+
+namespace App\Services;
+
+use Illuminate\Support\Str;
+
+class SignatureService
+{
+    protected $symmetricKey = "symetrickey";
+    protected $accessToken = "TOKEN";
+    protected $requestURL = "url";
+    protected $httpMethod = "POST";
+
+    public function generateSignature($requestBody)
+    {
+        $minifiedBody = preg_replace('/\s+/', '', $requestBody);
+        $sha256Hash = hash('sha256', $minifiedBody);
+        $lowercaseHash = strtolower($sha256Hash);
+
+        $timestamp = now()->format('Y-m-d\TH:i:sP');
+        $resultString = $this->httpMethod . ':' . $this->requestURL . ':' . $this->accessToken . ':' . $lowercaseHash . ':' . $timestamp;
+
+        $signature = $this->createSignatureTxn($this->symmetricKey, $resultString);
+
+        return [
+            'payload' => $resultString,
+            'signature' => $signature,
+            'timestamp' => $timestamp,
+        ];
+    }
+
+    protected function createSignatureTxn($symmetricKey, $resultString)
+    {
+        $secretKeyHash = hash('sha512', $symmetricKey, true);
+        $secretKeyEnc = base64_encode($secretKeyHash);
+        return hash_hmac('sha512', $resultString, $secretKeyEnc);
+    }
+}
+
+10. setting controller :
+php artisan make:controller SignatureTransactionController
+// app/Http/Controllers/SignatureController.php
+
+namespace App\Http\Controllers;
+
+use App\Services\SignatureService;
+use Illuminate\Http\Request;
+
+class SignatureController extends Controller
+{
+    protected $signatureService;
+
+    public function __construct(SignatureService $signatureService)
+    {
+        $this->signatureService = $signatureService;
+    }
+
+    public function generateSignature(Request $request)
+    {
+        $requestBody = json_encode([
+            'fromDateTime' => '2024-08-11T07:00:00+07:00',
+            'toDateTime' => '2024-08-11T23:30:00+07:00',
+            'pageNumber' => 1,
+        ]);
+
+        $result = $this->signatureService->generateSignature($requestBody);
+
+        return response()->json($result);
+    }
+}
+11. setting route :
+// routes/web.php
+
+use App\Http\Controllers\SignatureController;
+
+Route::get('/generate-signature', [SignatureController::class, 'generateSignature']);
+
+

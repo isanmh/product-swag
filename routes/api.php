@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\ProductApiController;
+use App\Http\Controllers\SignatureController;
+use App\Http\Controllers\SignatureTransactionController;
+use App\Http\Controllers\TokenApiController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -27,3 +30,9 @@ Route::put('/products/{id}', [ProductApiController::class, 'update']);
 Route::delete('/products/{id}', [ProductApiController::class, 'destroy']);
 
 Route::post('/search', [ProductApiController::class, 'search']);
+
+
+// SNAP BI
+Route::get('/generate-signature', [SignatureController::class, 'generateSignature']);
+Route::post('/send-request', [TokenApiController::class, 'sendRequest']);
+Route::get('/generate-signature-transaction', [SignatureTransactionController::class, 'generateSignature']);
